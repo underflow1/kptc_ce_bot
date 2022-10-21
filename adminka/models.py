@@ -48,6 +48,16 @@ class User(CreateUpdateTracker):
         return cls.objects.filter(user_id=user_id).first()
 
 
+    @classmethod
+    def get_user_allowed_user_id(cls, user_id: int):
+        """ Search user in DB, return User or None if not found """
+        field_name = 'allowed'
+        user = cls.objects.filter(user_id=user_id).first()
+        field_value = getattr(user, field_name)
+        return field_value
+
+
+
 @deconstructible
 class UploadToPathAndRename(object):
 

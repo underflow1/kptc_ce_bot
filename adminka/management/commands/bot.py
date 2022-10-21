@@ -53,25 +53,20 @@ def start(update, context):
     user = update.message.from_user
 
     user_model = User()
-    aa = user_model.get_user_by_user_id(user.id)
-    if not aa:
-        print(f'user {user.id} not exist')
+    user_exixts = user_model.get_user_by_user_id(user.id)
+    if not user_exixts:
         user_model.user_id = user.id
         user_model.username = user.username
         user_model.first_name = user.first_name
         user_model.last_name = user.last_name
         user_model.language_code = user.language_code
         user_model.save()
+        logger.info(f'new user {user.id} created')
     else:
-        print(f'user {user.id} exists')
+        logger.info(f'user {user.id} exists')
 
 
-
-
-
-
-
-    if not sqlite_extractor.check_user(user.id):
+    if not user_model.get_user_allowed_user_id(user.id):
         logger.info(user)
         logger.info(f"Пользователь {user.id} не авторизован")
         bot.send_message(
