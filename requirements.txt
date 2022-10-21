@@ -1,5 +1,6 @@
-flask
 python-dotenv
 requests
 python-telegram-bot
 flake8
+Pillow
+django==3.2

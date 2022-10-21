@@ -1,8 +1,6 @@
 import os
-import uuid
 
 from django.core.management.base import BaseCommand
-from django.conf import settings
 from dotenv import load_dotenv
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -14,7 +12,7 @@ from telegram.ext import (
     Filters,
 )
 
-from adminka.models import Photo
+from adminka.models import Photo, User
 from .helpers import SQLiteExtractor, logger
 
 
@@ -51,7 +49,28 @@ def get_message_id(message):
 
 
 def start(update, context):
+
     user = update.message.from_user
+
+    user_model = User()
+    aa = user_model.get_user_by_user_id(user.id)
+    if not aa:
+        print(f'user {user.id} not exist')
+        user_model.user_id = user.id
+        user_model.username = user.username
+        user_model.first_name = user.first_name
+        user_model.last_name = user.last_name
+        user_model.language_code = user.language_code
+        user_model.save()
+    else:
+        print(f'user {user.id} exists')
+
+
+
+
+
+
+
     if not sqlite_extractor.check_user(user.id):
         logger.info(user)
         logger.info(f"Пользователь {user.id} не авторизован")
@@ -167,17 +186,10 @@ def photo(update, context):
         f"Пользователь {context.user_data['username']} локация {context.user_data['location']} добавлено фото {context.user_data['added_count']}"
     )
 
-    filename = str(uuid.uuid4()) + '.jpg'
     photo_file = update.message.photo[-1].get_file()
 
     image_url = photo_file['file_path']
     image_filename = os.path.basename(image_url)
-    image_tmpdir = str(uuid.uuid4())
-    image_dst = os.path.join(settings.PHOTOS_URL, image_tmpdir, image_filename)
-    logger.info(f'image_url is {image_url}')
-    logger.info(f'image_filename is {image_filename}')
-    logger.info(f'image_tmpdir is {image_tmpdir}')
-    logger.info(f'image_dst is {image_dst}')
 
     from django.core.files import File  # you need this somewhere
     from django.core.files.temp import NamedTemporaryFile
@@ -189,30 +201,13 @@ def photo(update, context):
     img_temp.write(r.content)
     img_temp.flush()
 
-    # urllib.request.urlretrieve(photo_file['file_path']) # image_url is a URL to an image
-    # urllib.request.urlretrieve(image_url, image_dst)
-
-    # image = photo_file.download(f"photos/{filename}")
     photo_model = Photo()
-
-    logger.info(f"File is {File(img_temp)}")
-    logger.info(f"File type is {type(File(img_temp))}")
 
     photo_model.location = context.user_data['location']
     photo_model.user = context.user_data['username']
     photo_model.photo = File(img_temp)
 
     photo_model.save()
-
-    logger.info(f"photo_model is {photo_model}")
-    # img_temp.close()
-
-    # photo_dict = {
-    #     'filename': filename,
-    #     'location': context.user_data['location'],
-    #     'user': context.user_data['username']
-    # }
-    # sqlite_extractor.add_record(photo_dict, PhotoModel)
 
     keyboard = [
         [
