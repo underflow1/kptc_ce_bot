@@ -30,6 +30,18 @@ class CreateUpdateTracker(CreateTracker):
         abstract = True
 
 
+class Location(CreateUpdateTracker):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=256, **nb)
+
+    class Meta:
+        verbose_name = 'Локация'
+        verbose_name_plural = 'Локации'
+
+    def __str__(self):
+        return f'{self.name}'
+
+
 class User(CreateUpdateTracker):
     user_id = models.PositiveBigIntegerField(primary_key=True, help_text="Telegram client's id")  # telegram_id
     username = models.CharField(max_length=32, **nb)
@@ -38,6 +50,11 @@ class User(CreateUpdateTracker):
     language_code = models.CharField(max_length=8, help_text="Telegram client's lang", **nb)
     comment = models.CharField(max_length=256, **nb)
     allowed = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Пользователь'
+        verbose_name_plural = 'Пользователи'
+
 
     def __str__(self):
         return f'{self.user_id} {self.username} {self.last_name} {self.first_name}'
@@ -81,6 +98,10 @@ class Photo(CreateUpdateTracker):
     photo = models.ImageField(upload_to=UploadToPathAndRename(settings.PHOTOS_URL), blank=True)
     location = models.CharField('location', max_length=255, blank=False)
     user = models.CharField('user', max_length=255, blank=False)
+
+    class Meta:
+        verbose_name = 'Фотография'
+        verbose_name_plural = 'Фотографии'
 
     def __str__(self):
         return f'Изображение от пользователя {self.user} с локации {self.location}'
