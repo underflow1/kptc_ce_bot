@@ -97,8 +97,8 @@ class UploadToPathAndRename(object):
 class Photo(CreateUpdateTracker):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     photo = models.ImageField(upload_to=UploadToPathAndRename(settings.PHOTOS_URL), blank=True)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    location = models.ForeignKey(Location, on_delete=models.PROTECT)
+    user = models.ForeignKey(User, on_delete=models.PROTECT)
 
     class Meta:
         db_table = "photo"
