@@ -3,9 +3,6 @@ from django.utils.html import mark_safe
 import os
 from django.conf import settings
 from django.utils.deconstruct import deconstructible
-from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import QuerySet, Manager
-
 import uuid
 
 # Create your models here.
@@ -92,7 +89,7 @@ class UploadToPathAndRename(object):
             filename = '{}.{}'.format(instance.pk, ext)
         else:
             # set filename as random string
-            filename = '{}.{}'.format(uuid4().hex, ext)
+            filename = '{}.{}'.format(uuid.uuid4().hex, ext)
         # return the whole path to the file
         return os.path.join(self.sub_path, filename)
 
@@ -104,7 +101,8 @@ class Photo(CreateUpdateTracker):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     class Meta:
-        verbose_name = 'Фотография'
+        db_table = "photo"
+        verbose_name = 'Фото'
         verbose_name_plural = 'Фотографии'
 
     def __str__(self):
@@ -117,8 +115,3 @@ class Photo(CreateUpdateTracker):
         return mark_safe('<img src="/%s" width="150"/>' % (self.photo))
 
     image_tag.short_description = 'Image'
-
-    class Meta:
-        db_table = "photo"
-        verbose_name = 'Фото'
-        verbose_name_plural = 'Фотографии'

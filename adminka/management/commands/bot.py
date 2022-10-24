@@ -1,5 +1,8 @@
 import os
-
+import requests
+import logging
+from django.core.files import File
+from django.core.files.temp import NamedTemporaryFile
 from django.core.management.base import BaseCommand
 from dotenv import load_dotenv
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,27 +16,26 @@ from telegram.ext import (
 )
 
 from adminka.models import Photo, User, Location
-from .helpers import SQLiteExtractor, logger
 
 
-db_path = 'app.db'
-sqlite_extractor = SQLiteExtractor(db_path)
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(funcName)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 CHOOSE_LOCATION_STAGE, ADD_PHOTO_STAGE = range(2)
-# LOCATIONS = ['Дубнинская', 'Никитский', 'СКО', 'Тиснум']
-locations = Location.objects.all()
-print(locations)
-for location in locations:
-    print(location)
-
+TOKEN = os.getenv("TOKEN")
+bot = Bot(TOKEN)
 
 keyboard_locations_items = []
-for location in locations:
+for location in Location.objects.all():
     keyboard_locations_items.append(
         InlineKeyboardButton("▫️" + str(location.name), callback_data=str(location.id))
     )
+
 keyboard_cancel_item = InlineKeyboardButton("❌ Отменить", callback_data="end")
 keyboard_locations_items.append(keyboard_cancel_item)
 
@@ -54,12 +56,10 @@ def get_message_id(message):
 
 
 def start(update, context):
-
+    '''Вход в бота, показ локаций'''
+    # аутентификация и создание отсутствующего пользователя
     user = update.message.from_user
-    print(user)
-
     user_model = User.get_user_by_user_id(user.id)
-    # user_exixts = user_model.get_user_by_user_id(user.id)
     if not user_model:
         user_model = User(
             user_id = user.id,
@@ -69,11 +69,9 @@ def start(update, context):
             language_code = user.language_code
         )
         user_model.save()
-        logger.info(f'new user {user.id} created')
-    else:
-        logger.info(f'user {user.id} exists')
+        logger.info(f'new user {user_model} created')
 
-
+    # авторизация
     if not user_model.get_user_allowed_user_id(user.id):
         logger.info(user)
         logger.info(f"Пользователь {user_model} не авторизован")
@@ -82,70 +80,52 @@ def start(update, context):
             text="Пользователь не авторизован",
         )
         return ConversationHandler.END
-
-    context.user_data['user'] = user_model
-    logger.info(f"Пользователь {context.user_data['user']} начал разговор")
+    logger.info(f"Пользователь {user_model} начал разговор")
 
     reply_markup = InlineKeyboardMarkup(
-        build_menu(keyboard_locations_items, n_cols=1)
-    )
-
+        build_menu(keyboard_locations_items, n_cols=1))
     message = update.message.reply_text(
-        text="Выберите объект", reply_markup=reply_markup
-    )
+        text="Выберите объект", reply_markup=reply_markup)
+    start_message = get_message_id(message)
 
-    cancel_choose_message = get_message_id(message)
-    context.user_data['cancel_choose_message'] = cancel_choose_message
+    # сохраним полученные данные
+    context.user_data['user'] = user_model
+    context.user_data['start_message'] = start_message
     context.user_data['added_count'] = 0
-    context.user_data['cancel_photo_message'] = False
-    context.user_data['location'] = False
+    context.user_data['photo_message'] = None
+    context.user_data['location'] = None
+    context.user_data['no_location_message'] = None
 
     return CHOOSE_LOCATION_STAGE
 
 
 def location_choosed(update, context):
+    '''Локация выбрана, загрузка фоток'''
     query = update.callback_query
     query.answer()
-
-
-    location_id = query.data
-
-    location_model = Location.get_location_by_id(location_id)
+    location_model = Location.get_location_by_id(query.data)
     context.user_data['location'] = location_model
-    logger.info(f"Пользователь {context.user_data['user']} локация {context.user_data['location']}")
+    logger.info(f"Пользователь {context.user_data['user']} выбрал локацию {location_model}")
 
+    # подрихтуем сообщение о выборе локаций
+    bot.delete_message(**context.user_data['start_message'])
     keyboard = [[keyboard_cancel_item]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    cancel_choose_message = context.user_data['cancel_choose_message']
-    bot.delete_message(
-        chat_id=cancel_choose_message['chat_id'],
-        message_id=cancel_choose_message['message_id']
-    )
-
-    location_message_text = f"▪️ выбран объект {location_model}"
     message = bot.send_message(
         chat_id=query.message.chat.id,
-        text=location_message_text + "\nДобавляйте фото",
+        text=f"▪️ выбран объект {location_model}\nДобавляйте фото",
         reply_markup=reply_markup
     )
-
-    location_message = get_message_id(message)
-    location_message['text'] = location_message_text
-    context.user_data['location_message'] = location_message
+    context.user_data['location_message'] = get_message_id(message)
 
     return ADD_PHOTO_STAGE
 
 
 def repeat_photo(update, context):
-    logger.info(
-        f"Пользователь {context.user_data['user']} \
-        локация {context.user_data['location']}"
-    )
-
+    '''можно добавить фоток по нажатию кнопки Добавить еще,
+    а можно и не нажимать и продолжать добавлять)))'''
     query = update.callback_query
     query.answer()
-
     keyboard = [[keyboard_cancel_item]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -157,63 +137,51 @@ def repeat_photo(update, context):
 
 
 def no_location(update, context):
-    if context.user_data['added_count'] == 0:
-        bot.delete_message(
-            chat_id=update.message.chat.id,
-            message_id=update.message.message_id
-        )
-        update.message.reply_text(
-            text="❌ НЕ ВЫБРАН ОБЪЕКТ ❌",
-        )
+    '''Удалять фотки если они отправлены до выбора локации'''
+    bot.delete_message(
+        chat_id=update.message.chat.id,
+        message_id=update.message.message_id
+    )
+
+    if context.user_data['no_location_message']:
+        bot.delete_message(**context.user_data['no_location_message'])
+
+    message = update.message.reply_text(
+        text="❌ НЕ ВЫБРАН ОБЪЕКТ ❌",)
+    no_location_message = get_message_id(message)
+    context.user_data['no_location_message'] = no_location_message
+
     return CHOOSE_LOCATION_STAGE
 
 
 def photo(update, context):
-
-    """Stores the photo and asks for a location."""
-    if context.user_data['location_message']:
-        message = context.user_data['location_message']
-        bot.edit_message_text(
-            chat_id=message['chat_id'],
-            message_id=message['message_id'],
-            text=message['text']
-        )
-        context.user_data['location_message'] = False
-
-    if context.user_data['cancel_photo_message']:
-        message = context.user_data['cancel_photo_message']
+    """Сохраняем фото и информацию о локации и пользователе в бд"""
+    # прежде всего удалим предыдущее уведомление о том что фото добавлено
+    if context.user_data['photo_message']:
+        message = context.user_data['photo_message']
         bot.delete_message(
             chat_id=message['chat_id'],
             message_id=message['message_id']
         )
 
+    # посчитаем количество добавленных фото
     context.user_data['added_count'] = context.user_data['added_count'] + 1
 
     logger.info(
-        f"Пользователь {context.user_data['user']} локация {context.user_data['location']} добавлено фото {context.user_data['added_count']}"
+        f"Пользователь {context.user_data['user']} добавил фото №{context.user_data['added_count']}"
     )
 
-    photo_file = update.message.photo[-1].get_file()
-
-    image_url = photo_file['file_path']
-    image_filename = os.path.basename(image_url)
-
-    from django.core.files import File  # you need this somewhere
-    from django.core.files.temp import NamedTemporaryFile
-    import requests
-
+    image_url = update.message.photo[-1].get_file()['file_path']
     r = requests.get(image_url)
     img_temp = NamedTemporaryFile(delete=True, dir='temp')
-    img_temp.name = image_filename
+    img_temp.name = os.path.basename(image_url)
     img_temp.write(r.content)
     img_temp.flush()
 
     photo_model = Photo()
-
     photo_model.location = context.user_data['location']
     photo_model.user = context.user_data['user']
     photo_model.photo = File(img_temp)
-
     photo_model.save()
 
     keyboard = [
@@ -229,8 +197,8 @@ def photo(update, context):
         text=f"▪️ добавлено {context.user_data['added_count']} фото.",
         reply_markup=reply_markup
     )
-    cancel_photo_message = get_message_id(message)
-    context.user_data['cancel_photo_message'] = cancel_photo_message
+    photo_message = get_message_id(message)
+    context.user_data['photo_message'] = photo_message
 
     return ADD_PHOTO_STAGE
 
@@ -240,7 +208,7 @@ def end(update, context):
     `ConversationHandler` что разговор окончен"""
 
     logger.info(
-        f"Пользователь {context.user_data['user']} локация {context.user_data['location']}"
+        f"Пользователь {context.user_data['user']} закончил диалог"
     )
 
     query = update.callback_query
@@ -260,27 +228,9 @@ def end(update, context):
     return ConversationHandler.END
 
 
-TOKEN = os.getenv("TOKEN")
-bot = Bot(TOKEN)
-
-
 class Command(BaseCommand):
-  	# Используется как описание команды обычно
-    help = 'Implemented to Django application telegram bot setup command'
-
+    # Используется как описание команды обычно
     def handle(self, *args, **kwargs):
-        # bot.enable_save_next_step_handlers(delay=2) # Сохранение обработчиков
-        # bot.load_next_step_handlers()								# Загрузка обработчиков
-        # bot.infinity_polling()											# Бесконечный цикл бота
-
-# if __name__ == "__main__":
-
-
-    # logger.info(1)
-
-
-
-
         updater = Updater(TOKEN)
         dispatcher = updater.dispatcher
 
