@@ -30,15 +30,7 @@ CHOOSE_LOCATION_STAGE, ADD_PHOTO_STAGE = range(2)
 TOKEN = os.getenv("TOKEN")
 bot = Bot(TOKEN)
 
-keyboard_locations_items = []
-for location in Location.objects.all():
-    keyboard_locations_items.append(
-        InlineKeyboardButton("▫️" + str(location.name), callback_data=str(location.id))
-    )
-
 keyboard_cancel_item = InlineKeyboardButton("❌ Отменить", callback_data="end")
-keyboard_locations_items.append(keyboard_cancel_item)
-
 
 def build_menu(buttons, n_cols,
                header_buttons=None,
@@ -80,6 +72,13 @@ def start(update, context):
         )
         return ConversationHandler.END
     logger.info(f"Пользователь {user_model} начал разговор")
+
+    keyboard_locations_items = []
+    for location in Location.objects.all():
+        keyboard_locations_items.append(
+            InlineKeyboardButton("▫️" + str(location.name), callback_data=str(location.id))
+        )
+    keyboard_locations_items.append(keyboard_cancel_item)
 
     reply_markup = InlineKeyboardMarkup(
         build_menu(keyboard_locations_items, n_cols=1))
