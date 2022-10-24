@@ -14,7 +14,6 @@ nb = dict(null=True, blank=True)
 
 
 class CreateTracker(models.Model):
-    # auto_now_add автоматически выставит дату создания записи
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -23,7 +22,6 @@ class CreateTracker(models.Model):
 
 
 class CreateUpdateTracker(CreateTracker):
-    # auto_now изменятся при каждом обновлении записи
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta(CreateTracker.Meta):
@@ -32,7 +30,12 @@ class CreateUpdateTracker(CreateTracker):
 
 class Location(CreateUpdateTracker):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=256, **nb)
+    name = models.CharField(max_length=256, unique=True)
+
+    @classmethod
+    def get_location_by_id(cls, location_id: uuid):
+        """ Search user in DB, return User or None if not found """
+        return cls.objects.filter(id=location_id).first()
 
     class Meta:
         verbose_name = 'Локация'
@@ -55,15 +58,17 @@ class User(CreateUpdateTracker):
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
 
-
     def __str__(self):
-        return f'{self.user_id} {self.username} {self.last_name} {self.first_name}'
+        if self.last_name:
+            white_space = " "
+        else:
+            white_space = ""
+        return f'{self.first_name or ""}{white_space}{self.last_name or ""}'
 
     @classmethod
     def get_user_by_user_id(cls, user_id: int):
         """ Search user in DB, return User or None if not found """
         return cls.objects.filter(user_id=user_id).first()
-
 
     @classmethod
     def get_user_allowed_user_id(cls, user_id: int):
@@ -72,7 +77,6 @@ class User(CreateUpdateTracker):
         user = cls.objects.filter(user_id=user_id).first()
         field_value = getattr(user, field_name)
         return field_value
-
 
 
 @deconstructible
@@ -96,8 +100,8 @@ class UploadToPathAndRename(object):
 class Photo(CreateUpdateTracker):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     photo = models.ImageField(upload_to=UploadToPathAndRename(settings.PHOTOS_URL), blank=True)
-    location = models.CharField('location', max_length=255, blank=False)
-    user = models.CharField('user', max_length=255, blank=False)
+    location = models.ForeignKey(Location, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     class Meta:
         verbose_name = 'Фотография'
