@@ -15,7 +15,7 @@ from telegram.ext import (
     Filters,
 )
 
-from adminka.models import Photo, User, Location
+from bot.models import Photo, User, Location
 
 
 logging.basicConfig(
@@ -101,6 +101,10 @@ def start(update, context):
 
 def location_choosed(update, context):
     '''Локация выбрана, загрузка фоток'''
+
+    if context.user_data['no_location_message']:
+        bot.delete_message(**context.user_data['no_location_message'])
+
     query = update.callback_query
     query.answer()
     location_model = Location.get_location_by_id(query.data)
