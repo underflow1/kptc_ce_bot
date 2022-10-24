@@ -73,7 +73,6 @@ def start(update, context):
 
     # авторизация
     if not user_model.get_user_allowed_user_id(user.id):
-        logger.info(user)
         logger.info(f"Пользователь {user_model} не авторизован")
         bot.send_message(
             chat_id=update.message.chat.id,
