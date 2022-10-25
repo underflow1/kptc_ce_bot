@@ -4,7 +4,7 @@ When new user start to interact with bot, it adds user to the database.
 # How to run
 Clone:
 ``` bash
-git clone git@github.com:underflow1/kptc_ce_bot.git
+git clone https://github.com/underflow1/kptc_ce_bot.git
 cd kptc_ce_bot
 ```
 Create virtual environment and install all requirements:
